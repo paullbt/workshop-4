@@ -1,48 +1,55 @@
 import bodyParser from "body-parser";
-import express, { Request, Response } from "express";
-import { REGISTRY_PORT } from "../config";
+import express from "express";
+import {REGISTRY_PORT} from "../config";
 
-export type Node = { nodeId: number; pubKey: string; privateKey?: string };
+export type Node = {
+    nodeId: number;
+    pubKey: string
+};
 
 export type RegisterNodeBody = {
-  nodeId: number;
-  pubKey: string;
+    nodeId: number;
+    pubKey: string;
 };
 
 export type GetNodeRegistryBody = {
-  nodes: (Node & { privateKey?: string })[];
+    nodes: Node[];
 };
 
-const registeredNodes: Node[] = [];
+const nodeRegistry: GetNodeRegistryBody = {
+    nodes: [],
+};
 
 export async function launchRegistry() {
-  const _registry = express();
-  _registry.use(express.json());
-  _registry.use(bodyParser.json());
+    const _registry = express();
+    _registry.use(express.json());
+    _registry.use(bodyParser.json());
 
-  _registry.post('/registerNode', (req, res) => {
-    const { nodeId, pubKey }: RegisterNodeBody = req.body;
-    const existingNode = registeredNodes.find((node) => node.nodeId === nodeId);
+    _registry.get("/status", (_, res) => {
+        res.status(200).send("live");
+    });
 
-    if (existingNode) {
-      return res.status(400).json({ message: `Node ${nodeId} is already registered.` });
-    }
+    _registry.post("/registerNode", async (req, res) => {
+        try {
+            console.log("Registering node...");
+            const {nodeId, pubKey} = req.body as RegisterNodeBody;
+            if (!nodeRegistry.nodes.find((n) => n.nodeId === nodeId))
+                nodeRegistry.nodes.push({nodeId, pubKey});
+            res.status(200).send("Node registered");
+        } catch (error) {
+            res.status(500).send("Internal server error");
+        }
+    });
+    _registry.get("/getNodeRegistry", (_, res) => {
+        try {
+            console.log("Getting node registry...");
+            res.status(200).send(nodeRegistry);
+        } catch (error) {
+            res.status(500).send("Internal server error");
+        }
+    });
 
-    registeredNodes.push({ nodeId, pubKey});
-    const nodeRegistry: GetNodeRegistryBody = { nodes: registeredNodes };
-    res.json(nodeRegistry);
-
-    return res.status(201).json({ message: `Node ${nodeId} successfully registered.` });
-  });
-  _registry.get('/getNodeRegistry', (req, res) => {
-    const nodeRegistry: GetNodeRegistryBody = { nodes: registeredNodes };
-    res.json(nodeRegistry);
-  });
-   _registry.get("/status", (req, res) => { res.send('live');});
-
-  const server = _registry.listen(REGISTRY_PORT, () => {
-    console.log(`registry is listening on port ${REGISTRY_PORT}`);
-  });
-
-  return server;
-} 
+    return _registry.listen(REGISTRY_PORT, () => {
+        console.log(`registry is listening on port ${REGISTRY_PORT}`);
+    });
+}
